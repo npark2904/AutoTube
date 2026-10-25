@@ -17,6 +17,7 @@ import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -33,6 +34,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnPhoneForward: ImageButton
     private lateinit var btnPhoneRefresh: ImageButton
     private lateinit var phoneProgressBar: ProgressBar
+
+    private var pendingWebPermission: android.webkit.PermissionRequest? = null
+    private var backPressedTime: Long = 0L
+    private var backToast: Toast? = null
+
+    private val micPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val req = pendingWebPermission
+        pendingWebPermission = null
+        if (granted) req?.grant(req.resources) else req?.deny()
+    }
 
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
@@ -54,10 +67,30 @@ class MainActivity : AppCompatActivity() {
 
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
+        // 앱 시작 시 휴대폰 화면에서 마이크 권한을 미리 요청 (차량 화면에서는 팝업 불가)
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.RECORD_AUDIO
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+
         initViews()
         setupPreviewWebView()
         setupListeners()
         setupBackNavigation()
+
+        CarWebViewManager.phoneUrlSyncListener = { url ->
+            runOnUiThread {
+                if (CarWebViewManager.getCanonicalKey(previewWebView.url) != CarWebViewManager.getCanonicalKey(url)) {
+                    CarWebViewManager.isApplyingCarSyncToPhone = true
+                    previewWebView.loadUrl(url)
+                    previewWebView.postDelayed({
+                        CarWebViewManager.isApplyingCarSyncToPhone = false
+                    }, 1200L)
+                }
+            }
+        }
 
         // 프레젠테이션 및 안드로이드 오토 미디어 서비스 시작
         AutoPresentationService.start(this)
@@ -71,6 +104,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         displayManager.registerDisplayListener(displayListener, null)
+        CarWebViewManager.getCurrentUrl()?.let { carUrl ->
+            if (CarWebViewManager.getCanonicalKey(previewWebView.url) != CarWebViewManager.getCanonicalKey(carUrl)) {
+                CarWebViewManager.isApplyingCarSyncToPhone = true
+                previewWebView.loadUrl(carUrl)
+                previewWebView.postDelayed({
+                    CarWebViewManager.isApplyingCarSyncToPhone = false
+                }, 1200L)
+            }
+        }
         previewWebView.onResume()
         previewWebView.resumeTimers()
         CarWebViewManager.keepAlive()
@@ -83,16 +125,25 @@ class MainActivity : AppCompatActivity() {
         // 스마트폰 앱이 백그라운드로 내려가도 웹뷰 타이머 및 차량/폰 재생이 멈추지 않도록 유지
         previewWebView.onResume()
         previewWebView.resumeTimers()
-        CarWebViewManager.keepAlive()
-        CarWebViewManager.ensurePlayingInBackground()
+        if (CarWebViewManager.isCarConnected) {
+            CarWebViewManager.keepAlive()
+            CarWebViewManager.ensurePlayingInBackground()
+        }
     }
 
     override fun onStop() {
         super.onStop()
         previewWebView.onResume()
         previewWebView.resumeTimers()
-        CarWebViewManager.keepAlive()
-        CarWebViewManager.ensurePlayingInBackground()
+        if (CarWebViewManager.isCarConnected) {
+            CarWebViewManager.keepAlive()
+            CarWebViewManager.ensurePlayingInBackground()
+        }
+    }
+
+    override fun onDestroy() {
+        CarWebViewManager.phoneUrlSyncListener = null
+        super.onDestroy()
     }
 
     private fun initViews() {
@@ -136,14 +187,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         previewWebView.webViewClient = object : WebViewClient() {
+            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                if (!url.isNullOrEmpty() && !CarWebViewManager.isApplyingCarSyncToPhone) {
+                    CarWebViewManager.syncUrlFromPhone(url)
+                }
+            }
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 phoneProgressBar.visibility = View.VISIBLE
                 view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
-                if (!url.isNullOrEmpty()) {
-                    // 모바일에서 영상을 선택하거나 이동하면 안드로이드 오토 차량 화면에도 실시간 즉시 동기화!
-                    CarWebViewManager.loadUrl(url)
-                    sendUrlToAutoPresentation(url)
+                if (!url.isNullOrEmpty() && !CarWebViewManager.isApplyingCarSyncToPhone) {
+                    // 모바일에서 영상을 선택하거나 이동하면 안드로이드 오토 차량 화면에도 실시간 즉시 동기화
+                    CarWebViewManager.syncUrlFromPhone(url)
                 }
             }
 
@@ -155,6 +212,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         previewWebView.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                request ?: return
+                runOnUiThread {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                            this@MainActivity, android.Manifest.permission.RECORD_AUDIO
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        request.grant(request.resources)
+                    } else {
+                        pendingWebPermission = request
+                        micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            }
+
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 if (newProgress == 100) {
                     phoneProgressBar.visibility = View.GONE
@@ -171,12 +243,18 @@ class MainActivity : AppCompatActivity() {
         btnQuickHome.setOnClickListener {
             val url = "https://m.youtube.com"
             previewWebView.loadUrl(url)
-            sendUrlToAutoPresentation(url)
+            CarWebViewManager.syncUrlFromPhone(url)
         }
 
         btnPhoneBack.setOnClickListener {
             if (previewWebView.canGoBack()) {
                 previewWebView.goBack()
+            } else {
+                val homeUrl = "https://m.youtube.com"
+                if (CarWebViewManager.getCanonicalKey(previewWebView.url) != "home") {
+                    previewWebView.loadUrl(homeUrl)
+                    CarWebViewManager.syncUrlFromPhone(homeUrl)
+                }
             }
         }
 
@@ -195,15 +273,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun isHomeUrl(url: String?): Boolean {
+        return CarWebViewManager.getCanonicalKey(url) == "home"
+    }
+
     private fun setupBackNavigation() {
-        // 스마트폰 뒤로가기 버튼(제스처)을 누를 때 웹뷰가 이전 페이지로 가도록 처리
+        // 스마트폰 뒤로가기 버튼(제스처) 처리:
+        // 1. 이미 홈 화면인 경우 -> 2초 내에 한 번 더 누르면 앱 종료 UX 안내
+        // 2. 홈 화면이 아닌 경우 -> 이전 히스토리가 있으면 뒤로가기, 없으면 홈(https://m.youtube.com)으로 이동
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (isHomeUrl(previewWebView.url)) {
+                    val now = System.currentTimeMillis()
+                    if (now - backPressedTime < 2000L) {
+                        backToast?.cancel()
+                        finish()
+                    } else {
+                        backPressedTime = now
+                        backToast?.cancel()
+                        backToast = Toast.makeText(
+                            this@MainActivity,
+                            "한번더 백키를 누르면 종료합니다",
+                            Toast.LENGTH_SHORT
+                        )
+                        backToast?.show()
+                    }
+                    return
+                }
+
                 if (previewWebView.canGoBack()) {
                     previewWebView.goBack()
                 } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+                    val homeUrl = "https://m.youtube.com"
+                    if (CarWebViewManager.getCanonicalKey(previewWebView.url) != "home") {
+                        previewWebView.loadUrl(homeUrl)
+                        CarWebViewManager.syncUrlFromPhone(homeUrl)
+                    }
                 }
             }
         })
@@ -220,14 +325,6 @@ class MainActivity : AppCompatActivity() {
             viewStatusIndicator.setBackgroundColor(getColor(R.color.youtube_red))
             tvStatusTitle.text = getString(R.string.title_disconnected)
         }
-    }
-
-    private fun sendUrlToAutoPresentation(url: String) {
-        val intent = Intent(this, AutoPresentationService::class.java).apply {
-            action = AutoPresentationService.ACTION_LOAD_URL
-            putExtra(AutoPresentationService.EXTRA_URL, url)
-        }
-        startService(intent)
     }
 
     private fun showTestGuideDialog() {

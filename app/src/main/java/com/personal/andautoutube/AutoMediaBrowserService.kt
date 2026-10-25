@@ -27,7 +27,7 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
 
     private lateinit var mediaSession: MediaSessionCompat
     private var defaultAlbumArt: Bitmap? = null
-    private var currentTitle: String = "YouTube 재생 중"
+    private var currentTitle: String = "Youtube"
     private var currentArtist: String = "AutoTube"
     private var currentPlaybackState: Int = PlaybackStateCompat.STATE_PLAYING
     private var audioManager: AudioManager? = null
@@ -129,6 +129,16 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
                     CarWebViewManager.seekRelative(-10)
                 }
 
+                override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+                    if (!query.isNullOrBlank()) {
+                        val url = "https://m.youtube.com/results?search_query=" + android.net.Uri.encode(query.trim())
+                        CarWebViewManager.loadUrl(url)
+                    } else {
+                        CarWebViewManager.playPauseVideo()
+                    }
+                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                }
+
                 override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
                     updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                     CarWebViewManager.playPauseVideo()
@@ -185,7 +195,8 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
                         PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                         PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                         PlaybackStateCompat.ACTION_FAST_FORWARD or
-                        PlaybackStateCompat.ACTION_REWIND
+                        PlaybackStateCompat.ACTION_REWIND or
+                        PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
             )
             // position을 0L 이상 및 실시간 기준으로 전달하여 안드로이드 오토 미디어 위젯이 활성 상태로 인식하게 함
             .setState(state, 0L, 1.0f, SystemClock.elapsedRealtime())
@@ -350,6 +361,22 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
         var instance: AutoMediaBrowserService? = null
         private var isDisplayingOnScreen: Boolean = false
 
+        fun onCarDisconnected() {
+            isDisplayingOnScreen = false
+            instance?.let { service ->
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        service.audioFocusRequest?.let { service.audioManager?.abandonAudioFocusRequest(it) }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        service.audioManager?.abandonAudioFocus(service.audioFocusListener)
+                    }
+                    service.hasRequestedInitialAudioFocus = false
+                } catch (_: Exception) {}
+                service.updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            }
+        }
+
         fun setForegroundDisplaying(displaying: Boolean) {
             isDisplayingOnScreen = displaying
             instance?.let { service ->
@@ -363,6 +390,7 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
         fun updateCurrentMedia(title: String, isPlaying: Boolean = true, artist: String = "AutoTube") {
             instance?.let { service ->
                 val newState = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+                android.util.Log.d("AutoMediaTitle", "title='$title' artist='$artist' playing=$isPlaying")
                 val cleanTitle = title.trim()
                 val cleanArtist = if (artist.isBlank()) "AutoTube" else artist.trim()
                 val metaChanged = cleanTitle.isNotBlank() && (cleanTitle != service.currentTitle || cleanArtist != service.currentArtist)

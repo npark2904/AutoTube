@@ -19,12 +19,26 @@ class YouTubeCarWebViewClient(
         return false
     }
 
+    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+        super.doUpdateVisitedHistory(view, url, isReload)
+        if (!url.isNullOrEmpty()) {
+            tvUrlDisplay?.text = url
+            if (!CarWebViewManager.isApplyingPhoneSyncToCar) {
+                CarWebViewManager.onCarUrlChanged(url)
+            }
+        }
+        view?.evaluateJavascript("if (window.__atPush) { window.__atPush(); setTimeout(window.__atPush, 300); }", null)
+    }
+
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         progressBar?.visibility = View.VISIBLE
         progressBar?.progress = 10
         url?.let {
             tvUrlDisplay?.text = it
+            if (!CarWebViewManager.isApplyingPhoneSyncToCar) {
+                CarWebViewManager.onCarUrlChanged(it)
+            }
         }
         view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
     }
@@ -38,50 +52,23 @@ class YouTubeCarWebViewClient(
         }
         view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
 
-        // 차량 화면에 맞춤 스크립트 주입 (가로형 와이드 디스플레이 및 플레이 타임 바 터치 최적화)
+        // 차량 화면에 맞춤 스크립트 주입 (가로형 와이드 디스플레이 컴팩트 뷰)
         val carOptimizingJs = """
             (function() {
                 // 1. 모바일 유튜브에서 상단 '앱 열기' 유도 배너 제거
                 var appPromo = document.querySelector('ytm-upsell-dialog-renderer');
                 if (appPromo) appPromo.remove();
                 
-                // 2. 가로 차량 화면에 맞춘 컴팩트 뷰 & 시크바 터치 영역 확장 CSS
+                // 2. 가로 차량 화면에 맞춘 컴팩트 뷰 CSS (시크바 클릭 왜곡 방지를 위해 시크바 강제 CSS는 제거하고 순정 유지)
                 var existingStyle = document.getElementById('autotube-car-style');
                 if (!existingStyle) {
                     var style = document.createElement('style');
                     style.id = 'autotube-car-style';
-                    style.innerHTML = `
+                    style.textContent = `
                         .mobile-topbar-header { height: 42px !important; }
                         ytm-pivot-bar-renderer { height: 44px !important; }
                         .pivot-bar-item-tab { padding: 4px 0 !important; font-size: 11px !important; }
                         ytm-chip-cloud-renderer { padding: 4px 6px !important; }
-
-                        /* 하단 플레이 타임 바(시크바) 터치 영역 대폭 확대 및 시인성 강화 */
-                        ytm-progress-bar, .ytp-progress-bar-container, .progress-bar-line {
-                            height: 32px !important;
-                            min-height: 32px !important;
-                            padding: 12px 0 !important;
-                            cursor: pointer !important;
-                            touch-action: none !important;
-                        }
-                        .progress-bar-background {
-                            height: 6px !important;
-                            border-radius: 3px !important;
-                        }
-                        .progress-bar-played {
-                            height: 6px !important;
-                            border-radius: 3px !important;
-                            background-color: #ff0000 !important;
-                        }
-                        .progress-bar-playhead {
-                            width: 14px !important;
-                            height: 14px !important;
-                            border-radius: 50% !important;
-                            top: 50% !important;
-                            transform: translateY(-50%) !important;
-                            background: #ffffff !important;
-                            box-shadow: 0 0 3px rgba(0,0,0,0.6) !important;
-                        }
                     `;
                     document.head.appendChild(style);
                 }
@@ -92,66 +79,7 @@ class YouTubeCarWebViewClient(
                     videos[i].muted = false;
                 }
 
-                // 4. 공식 movie_player.seekTo 기반 시크바 정밀 탐색 & 썸네일 클릭 처리
-                function doSeek(clientX) {
-                    var bar = document.querySelector('ytm-progress-bar, .ytp-progress-bar-container, .progress-bar-line, .progress-bar-background');
-                    if (!bar || clientX === undefined) return;
-                    var rect = bar.getBoundingClientRect();
-                    var ratio = (clientX - rect.left) / rect.width;
-                    ratio = Math.max(0, Math.min(1, ratio));
-
-                    var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-                    var video = document.querySelector('video');
-                    var duration = 0;
-                    if (player && typeof player.getDuration === 'function') {
-                        duration = player.getDuration();
-                    }
-                    if (!duration && video) {
-                        duration = video.duration;
-                    }
-
-                    if (duration > 0) {
-                        var targetTime = ratio * duration;
-                        if (player && typeof player.seekTo === 'function') {
-                            player.seekTo(targetTime, true);
-                            if (typeof player.playVideo === 'function') player.playVideo();
-                        } else if (video) {
-                            video.currentTime = targetTime;
-                            video.play();
-                        }
-                    }
-                }
-
-                document.addEventListener('click', function(e) {
-                    var target = e.target;
-                    // 시크바 영역 클릭
-                    var bar = target.closest('ytm-progress-bar, .ytp-progress-bar-container, .progress-bar-line, .progress-bar-background');
-                    if (bar) {
-                        doSeek(e.clientX);
-                        return;
-                    }
-                    // 썸네일 미리보기 창 클릭
-                    var thumb = target.closest('ytm-preview-thumbnail, .ytp-tooltip, [class*="preview"]');
-                    if (thumb) {
-                        var timeText = thumb.innerText || '';
-                        var m = timeText.match(/(\d+):(\d+)(?::(\d+))?/);
-                        if (m) {
-                            var sec = 0;
-                            if (m[3]) {
-                                sec = parseInt(m[1])*3600 + parseInt(m[2])*60 + parseInt(m[3]);
-                            } else {
-                                sec = parseInt(m[1])*60 + parseInt(m[2]);
-                            }
-                            var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-                            if (player && typeof player.seekTo === 'function') {
-                                player.seekTo(sec, true);
-                                if (typeof player.playVideo === 'function') player.playVideo();
-                            }
-                        }
-                    }
-                }, true);
-
-                // 5. 유튜브 광고 자동 건너뛰기 보조
+                // 4. 유튜브 광고 자동 건너뛰기 보조
                 function autoSkipAds() {
                     var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton');
                     if (skipBtn) {
@@ -160,14 +88,32 @@ class YouTubeCarWebViewClient(
                 }
                 setInterval(autoSkipAds, 1000);
 
-                // 6. 안드로이드 오토 Coolwalk 우측 미디어 카드에 현재 곡명/채널명/재생상태 실시간 전송
-                setInterval(function() {
+                // 5. 안드로이드 오토 Coolwalk 우측 미디어 카드에 현재 곡명/채널명/재생상태 실시간 전송
+                var __push = function() {
                     try {
-                        var titleElem = document.querySelector('.slim-video-information-title, ytm-slim-video-metadata-renderer .title, h2.title, .video-details-title');
-                        var title = (titleElem ? titleElem.innerText : '') || document.title.replace(' - YouTube', '').trim();
-                        
-                        var channelElem = document.querySelector('.slim-owner-channel-name, ytm-channel-name, .channel-name, .ytm-slim-owner-channel-name');
-                        var artist = (channelElem ? channelElem.innerText.trim() : '') || 'AutoTube';
+                        var isWatchOrShorts = location.pathname.indexOf('/watch') === 0 || location.pathname.indexOf('/shorts') === 0;
+                        var mainDom = document.querySelector('ytm-browse, ytm-rich-grid-renderer, [tab-identifier="FEwhat_to_watch"], ytm-pivot-bar-renderer, ytm-search');
+                        var isMainScreen = !isWatchOrShorts && (location.pathname === '/' || !!mainDom);
+                        var title = '';
+                        var artist = 'AutoTube';
+
+                        if (isMainScreen) {
+                            title = 'Youtube';
+                            artist = 'AutoTube';
+                        } else {
+                            var titleElem = document.querySelector('h2.ytVideoMetadataViewModelTitle') || document.querySelector('ytd-watch-metadata #title h1 yt-formatted-string') || document.querySelector('ytd-watch-metadata #title h1') || document.querySelector('#title h1') || document.querySelector('.slim-video-information-title, ytm-slim-video-metadata-renderer .title, .video-details-title');
+                            title = (titleElem ? (titleElem.getAttribute('title') || titleElem.innerText || titleElem.textContent || '').trim() : '');
+                            if (!title) {
+                                var mt = document.querySelector('meta[property="og:title"]');
+                                var dt = (document.title || '').replace(/ - YouTube${'$'}/, '').trim();
+                                title = (dt && dt !== 'YouTube') ? dt : ((mt && mt.content) ? mt.content.trim() : '');
+                            }
+                            if (!title) {
+                                title = 'Youtube';
+                            }
+                            var channelElem = document.querySelector('.ytVideoSubtitleViewModelSubtitleContent .ytVideoSubtitleViewModelBoldSubstring') || document.querySelector('.slim-owner-channel-name, ytm-channel-name, .channel-name, .ytm-slim-owner-channel-name');
+                            artist = (channelElem ? channelElem.innerText.trim() : '') || 'AutoTube';
+                        }
 
                         var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
                         var isPlaying = false;
@@ -178,7 +124,7 @@ class YouTubeCarWebViewClient(
                             if (v) isPlaying = (!v.paused && !v.ended && v.currentTime > 0);
                         }
 
-                        if (window.AndroidMedia && title) {
+                        if (window.AndroidMedia) {
                             if (window.AndroidMedia.onMediaDetailsChanged) {
                                 window.AndroidMedia.onMediaDetailsChanged(title, artist, isPlaying);
                             } else {
@@ -186,7 +132,11 @@ class YouTubeCarWebViewClient(
                             }
                         }
                     } catch(err) {}
-                }, 2000);
+                };
+                if (window.__atMediaHooked) { clearInterval(window.__atMediaTimer); } else { window.__atMediaHooked = true; ['play','playing','pause','ended','seeked'].forEach(function(t){ document.addEventListener(t, function(){ setTimeout(window.__atPush, 50); }, true); }); ['click','touchend','keydown'].forEach(function(t){ document.addEventListener(t, function(){ [100,500,1200].forEach(function(ms){ setTimeout(function(){ if (window.__atPush) window.__atPush(); }, ms); }); }, true); }); ['waiting','stalled','canplay','emptied','loadeddata'].forEach(function(t){ document.addEventListener(t, function(){ setTimeout(window.__atPush, 100); }, true); }); }
+                window.__atPush = __push;
+                window.__atMediaTimer = setInterval(__push, 1000);
+                __push();
             })();
         """.trimIndent()
 

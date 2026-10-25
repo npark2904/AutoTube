@@ -50,7 +50,23 @@ class AutoPresentationService : Service() {
             .setContentIntent(pendingIntent)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        // 백그라운드(차량 화면 사용 중)에서도 마이크 입력이 무음 처리되지 않도록 microphone 타입 포함
+        // (RECORD_AUDIO 허용 시에만; 미허용 상태에서 지정하면 SecurityException 발생)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var type = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (micGranted) type = type or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            try {
+                startForeground(NOTIFICATION_ID, notification, type)
+            } catch (e: Exception) {
+                Log.w("AutoPresentationService", "mic FGS type failed, fallback", e)
+                startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -23,42 +23,204 @@
         android:progressTint="@color/youtube_red"
         android:visibility="gone" />
 
-    <!-- 우측 하단 플로팅 기본 뒤로가기(Back) 버튼 (화면 위 오버레이, 별도 영역 미차지) -->
+    <!-- 좌측 상단 세로 퀵 메뉴 (Back 버튼 분리 후 상단 배치) -->
     <LinearLayout
         android:id="@+id/topMiniControlBar"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_width="56dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|top"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
         android:background="@drawable/bg_mini_control_bar"
         android:elevation="8dp"
         android:gravity="center"
-        android:orientation="horizontal">
+        android:orientation="vertical"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
 
-        <ImageButton
-            android:id="@+id/btnMiniBack"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+        <Button
+            android:id="@+id/btnMiniRewind"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="뒤로가기"
-            android:padding="10dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_nav_back" />
+            android:contentDescription="5초 뒤로"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp"
+            android:text="-5s"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnMiniForward"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="5초 앞으로"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="0dp"
+            android:text="+5s"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
         <ImageButton
             android:id="@+id/btnMiniHome"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="홈"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_nav_home" />
 
         <ImageButton
             android:id="@+id/btnMiniRefresh"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="새로고침"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_nav_refresh" />
+
+    </LinearLayout>
+
+    <!-- 좌측 하단 원형 플로팅 Back 버튼 (네비 앱 스타일 원형 버튼) -->
+    <ImageButton
+        android:id="@+id/btnFloatingBack"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_circle_button"
+        android:contentDescription="뒤로가기"
+        android:elevation="8dp"
+        android:padding="13dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_nav_back" />
+
+    <!-- 음성 인식 상태 전용 오버레이 UI (CarToast가 막혀도 항상 선명하게 표시) -->
+    <LinearLayout
+        android:id="@+id/voiceSearchOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_mini_control_bar"
+        android:elevation="24dp"
+        android:gravity="center"
+        android:minWidth="280dp"
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingTop="22dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="22dp"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/voiceMicBadge"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_voice_mic_circle">
+
+            <ImageView
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_mic" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvVoiceStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:text="듣는 중..."
+            android:textColor="#FFFFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvVoiceSubText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="검색할 단어를 말씀해 주세요 (터치 시 취소)"
+            android:textColor="#B3FFFFFF"
+            android:textSize="13sp" />
+
+    </LinearLayout>
+
+    <!-- 영상 탐색(스크러빙) 제스처 전용 네이티브 HUD 오버레이 (전체화면 및 일반 재생 모두 선명하게 표시) -->
+    <LinearLayout
+        android:id="@+id/scrubOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_mini_control_bar"
+        android:elevation="30dp"
+        android:gravity="center"
+        android:minWidth="280dp"
+        android:orientation="vertical"
+        android:paddingStart="32dp"
+        android:paddingTop="18dp"
+        android:paddingEnd="32dp"
+        android:paddingBottom="18dp"
+        android:translationZ="120dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvScrubAction"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="▶▶ 빨리감기 (+0초)"
+            android:textColor="#FFFF4444"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvScrubTargetTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="00:00"
+                android:textColor="#FFFFFFFF"
+                android:textSize="32sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvScrubDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:text="/ 00:00"
+                android:textColor="#B3FFFFFF"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvScrubHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="화면을 터치하거나 손을 떼면 이동합니다"
+            android:textColor="#80FFFFFF"
+            android:textSize="12sp" />
 
     </LinearLayout>
 

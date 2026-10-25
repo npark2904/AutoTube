@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- 안드로이드 오토 Surface 화면 직접 렌더링을 위한 권한 -->
@@ -19,6 +22,21 @@
     <uses-feature
         android:name="android.software.car.mode"
         android:required="false" />
+
+    <queries>
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.skt.tmap.ku" />
+        <package android:name="com.nhn.android.nmap" />
+        <package android:name="com.locnall.KimGiSa" />
+        <package android:name="com.waze" />
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="androidx.car.app.CarAppService" />
+            <category android:name="androidx.car.app.category.NAVIGATION" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -80,7 +98,7 @@
         <service
             android:name=".AutoPresentationService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback|microphone" />
 
     </application>
 

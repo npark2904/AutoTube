@@ -14,4 +14,9 @@ class AutoCarAppService : CarAppService() {
     override fun onCreateSession(): Session {
         return YouTubeCarSession()
     }
+
+    override fun onDestroy() {
+        CarWebViewManager.onCarDisconnected()
+        super.onDestroy()
+    }
 }
