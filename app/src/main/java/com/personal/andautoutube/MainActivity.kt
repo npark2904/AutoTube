@@ -71,12 +71,28 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         displayManager.registerDisplayListener(displayListener, null)
+        previewWebView.onResume()
+        previewWebView.resumeTimers()
+        CarWebViewManager.keepAlive()
         updateConnectionStatus()
     }
 
     override fun onPause() {
         super.onPause()
         displayManager.unregisterDisplayListener(displayListener)
+        // 스마트폰 앱이 백그라운드로 내려가도 웹뷰 타이머 및 차량/폰 재생이 멈추지 않도록 유지
+        previewWebView.onResume()
+        previewWebView.resumeTimers()
+        CarWebViewManager.keepAlive()
+        CarWebViewManager.ensurePlayingInBackground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        previewWebView.onResume()
+        previewWebView.resumeTimers()
+        CarWebViewManager.keepAlive()
+        CarWebViewManager.ensurePlayingInBackground()
     }
 
     private fun initViews() {
@@ -111,10 +127,19 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(previewWebView, true)
 
+        if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            androidx.webkit.WebViewCompat.addDocumentStartJavaScript(
+                previewWebView,
+                CarWebViewManager.VISIBILITY_SPOOF_JS,
+                setOf("*")
+            )
+        }
+
         previewWebView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 phoneProgressBar.visibility = View.VISIBLE
+                view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
                 if (!url.isNullOrEmpty()) {
                     // 모바일에서 영상을 선택하거나 이동하면 안드로이드 오토 차량 화면에도 실시간 즉시 동기화!
                     CarWebViewManager.loadUrl(url)
@@ -125,6 +150,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 phoneProgressBar.visibility = View.GONE
+                view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
             }
         }
 

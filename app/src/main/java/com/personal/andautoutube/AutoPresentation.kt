@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
 import android.util.DisplayMetrics
 import android.util.Log
@@ -45,7 +46,7 @@ class AutoPresentation(
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable {
         topMiniControlBar.animate()
-            .alpha(0.4f)
+            .alpha(0.65f)
             .setDuration(350)
             .start()
     }
@@ -83,11 +84,9 @@ class AutoPresentation(
 
         window?.apply {
             val lp = attributes
-            lp.width = w
-            lp.height = h
-            lp.x = 0
-            lp.y = 0
-            lp.gravity = Gravity.TOP or Gravity.START
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT
+            lp.height = WindowManager.LayoutParams.MATCH_PARENT
+            lp.gravity = Gravity.FILL
             attributes = lp
             setBackgroundDrawable(ColorDrawable(Color.BLACK))
             addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -141,6 +140,41 @@ class AutoPresentation(
         hideHandler.postDelayed(hideRunnable, durationMs)
     }
 
+    /** 웹뷰는 항상 100% 전체화면을 유지하고(별도 여백/영역 없음), 우측 하단 백버튼만 가시 영역 우측 하단에 맞춰 오버레이 표시 */
+    fun updateVisibleArea(visibleArea: Rect) {
+        if (visibleArea.width() <= 0 || visibleArea.height() <= 0) return
+
+        // 웹뷰 컨테이너는 별도 영역 분리 없이 전체 화면(MATCH_PARENT) 고정
+        val lp = webViewContainer.layoutParams as? FrameLayout.LayoutParams
+        if (lp != null && (lp.width != ViewGroup.LayoutParams.MATCH_PARENT ||
+                    lp.height != ViewGroup.LayoutParams.MATCH_PARENT ||
+                    lp.leftMargin != 0 || lp.topMargin != 0)) {
+            lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            lp.leftMargin = 0
+            lp.topMargin = 0
+            webViewContainer.layoutParams = lp
+        }
+
+        // 우측 하단 플로팅 백버튼을 화면 위에 오버레이로 배치
+        val density = context.resources.displayMetrics.density
+        val marginPx = (16 * density).toInt()
+        val decorW = window?.decorView?.width ?: 0
+        val decorH = window?.decorView?.height ?: 0
+
+        val barLp = topMiniControlBar.layoutParams as? FrameLayout.LayoutParams
+        barLp?.let {
+            it.gravity = Gravity.BOTTOM or Gravity.END
+            it.leftMargin = 0
+            it.topMargin = 0
+            val extraRight = if (decorW > visibleArea.right && visibleArea.right > 0) (decorW - visibleArea.right) else 0
+            val extraBottom = if (decorH > visibleArea.bottom && visibleArea.bottom > 0) (decorH - visibleArea.bottom) else 0
+            it.rightMargin = extraRight + marginPx
+            it.bottomMargin = extraBottom + marginPx
+            topMiniControlBar.layoutParams = it
+        }
+    }
+
     fun dispatchTap(x: Float, y: Float) {
         val decor = window?.decorView ?: return
         val downTime = SystemClock.uptimeMillis()
@@ -158,6 +192,25 @@ class AutoPresentation(
 
     fun dispatchScroll(distanceX: Float, distanceY: Float) {
         webView?.scrollBy(distanceX.toInt(), distanceY.toInt())
+    }
+
+    fun ensureWebViewAttached() {
+        if (!::webViewContainer.isInitialized) return
+        val current = webView
+        if (current == null || current.parent !== webViewContainer) {
+            Log.d("AutoPresentation", "Re-attaching WebView to webViewContainer")
+            attachWebView()
+        } else {
+            current.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            current.requestLayout()
+            current.invalidate()
+        }
+        webViewContainer.requestLayout()
+        webViewContainer.invalidate()
+        window?.decorView?.invalidate()
     }
 
     private fun attachWebView() {

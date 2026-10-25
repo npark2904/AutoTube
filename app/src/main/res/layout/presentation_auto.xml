@@ -23,62 +23,41 @@
         android:progressTint="@color/youtube_red"
         android:visibility="gone" />
 
-    <!-- 상단 중앙 초슬림 미니 플로팅 캡슐 (유튜브 헤더 영역 크기, 자동 페이드아웃) -->
+    <!-- 우측 하단 플로팅 기본 뒤로가기(Back) 버튼 (화면 위 오버레이, 별도 영역 미차지) -->
     <LinearLayout
         android:id="@+id/topMiniControlBar"
-        android:layout_width="wrap_content"
-        android:layout_height="32dp"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="4dp"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:background="@drawable/bg_mini_control_bar"
-        android:elevation="6dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp">
+        android:elevation="8dp"
+        android:gravity="center"
+        android:orientation="horizontal">
 
         <ImageButton
             android:id="@+id/btnMiniBack"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="뒤로가기"
-            android:padding="5dp"
+            android:padding="10dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_nav_back" />
 
-        <View
-            android:layout_width="1dp"
-            android:layout_height="14dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:background="#33FFFFFF" />
-
         <ImageButton
             android:id="@+id/btnMiniHome"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="홈"
-            android:padding="5dp"
-            android:scaleType="fitCenter"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
             android:src="@drawable/ic_nav_home" />
-
-        <View
-            android:layout_width="1dp"
-            android:layout_height="14dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:background="#33FFFFFF" />
 
         <ImageButton
             android:id="@+id/btnMiniRefresh"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="새로고침"
-            android:padding="5dp"
-            android:scaleType="fitCenter"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
             android:src="@drawable/ic_nav_refresh" />
 
     </LinearLayout>

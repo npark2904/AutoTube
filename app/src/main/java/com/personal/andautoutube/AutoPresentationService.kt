@@ -16,33 +16,9 @@ import androidx.core.app.NotificationCompat
 
 class AutoPresentationService : Service() {
 
-    private lateinit var displayManager: DisplayManager
-    private var currentPresentation: AutoPresentation? = null
-
-    private val displayListener = object : DisplayManager.DisplayListener {
-        override fun onDisplayAdded(displayId: Int) {
-            val display = displayManager.getDisplay(displayId)
-            Log.d(TAG, "Display added: id=$displayId, name=${display?.name}")
-            checkAndShowPresentation(display)
-        }
-
-        override fun onDisplayRemoved(displayId: Int) {
-            Log.d(TAG, "Display removed: id=$displayId")
-            if (currentPresentation?.display?.displayId == displayId) {
-                dismissPresentation()
-            }
-        }
-
-        override fun onDisplayChanged(displayId: Int) {}
-    }
-
     override fun onCreate() {
         super.onCreate()
-        displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        displayManager.registerDisplayListener(displayListener, null)
-
         startForegroundNotification()
-        scanExistingDisplays()
     }
 
     private fun startForegroundNotification() {
@@ -77,71 +53,23 @@ class AutoPresentationService : Service() {
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    private fun scanExistingDisplays() {
-        val displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
-        for (display in displays) {
-            if (checkAndShowPresentation(display)) {
-                break
-            }
-        }
-    }
-
-    private fun checkAndShowPresentation(display: Display?): Boolean {
-        if (display == null || !display.isValid) return false
-
-        val displayName = display.name ?: ""
-        // AutoTubeVirtualDisplay는 YouTubeCarScreen이 단독 관리하므로 Service에서 중복 생성하지 않음!
-        if (displayName.contains("GhostActivityDisplay", ignoreCase = true) ||
-            displayName.contains("AutoTubeVirtualDisplay", ignoreCase = true)) {
-            Log.d(TAG, "Skipping display managed by Screen: $displayName")
-            return false
-        }
-
-        // 기본 폰 화면이 아닌 안드로이드 오토 디스플레이인 경우 Presentation 생성
-        if (display.displayId != Display.DEFAULT_DISPLAY) {
-            try {
-                dismissPresentation()
-                Log.d(TAG, "Showing AutoPresentation on display: id=${display.displayId}, name=$displayName")
-
-                currentPresentation = AutoPresentation(this, display).apply {
-                    show()
-                }
-                return true
-            } catch (e: Exception) {
-                Log.e(TAG, "Error displaying presentation on $displayName", e)
-            }
-        }
-        return false
-    }
-
-    private fun dismissPresentation() {
-        currentPresentation?.let {
-            try {
-                it.dismiss()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error dismissing presentation", e)
-            }
-            currentPresentation = null
-        }
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent != null) {
             when (intent.action) {
                 ACTION_LOAD_URL -> {
                     val url = intent.getStringExtra(EXTRA_URL)
                     if (!url.isNullOrEmpty()) {
-                        currentPresentation?.loadUrl(url)
+                        CarWebViewManager.loadUrl(url)
                     }
                 }
                 ACTION_PLAY_PAUSE -> {
-                    currentPresentation?.playPauseVideo()
+                    CarWebViewManager.playPauseVideo()
                 }
                 ACTION_NEXT -> {
-                    currentPresentation?.nextVideo()
+                    CarWebViewManager.nextVideo()
                 }
                 ACTION_PREV -> {
-                    currentPresentation?.prevVideo()
+                    CarWebViewManager.prevVideo()
                 }
                 else -> {}
             }
@@ -150,8 +78,6 @@ class AutoPresentationService : Service() {
     }
 
     override fun onDestroy() {
-        displayManager.unregisterDisplayListener(displayListener)
-        dismissPresentation()
         super.onDestroy()
     }
 

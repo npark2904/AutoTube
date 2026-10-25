@@ -8,6 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -27,6 +30,45 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
     private var currentTitle: String = "YouTube 재생 중"
     private var currentArtist: String = "AutoTube"
     private var currentPlaybackState: Int = PlaybackStateCompat.STATE_PLAYING
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasRequestedInitialAudioFocus = false
+    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        android.util.Log.d("AutoMediaBrowserService", "onAudioFocusChange: $focusChange")
+    }
+
+    fun requestAudioFocusOnce(): Boolean {
+        if (hasRequestedInitialAudioFocus) return true
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        audioManager = am
+        hasRequestedInitialAudioFocus = true
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val focusRequest = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(audioFocusListener)
+                    .build()
+                    .also { audioFocusRequest = it }
+                am.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(
+                    audioFocusListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AutoMediaBrowserService", "Error requesting audio focus", e)
+            false
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -127,6 +169,12 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
 
     fun updatePlaybackState(state: Int) {
         currentPlaybackState = state
+
+        if (!hasRequestedInitialAudioFocus && state == PlaybackStateCompat.STATE_PLAYING) {
+            requestAudioFocusOnce()
+        }
+
+        mediaSession.isActive = true
 
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(
@@ -305,16 +353,10 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
         fun setForegroundDisplaying(displaying: Boolean) {
             isDisplayingOnScreen = displaying
             instance?.let { service ->
-                if (displaying) {
-                    // 화면에 AutoTube가 직접 전체/메인으로 렌더링되고 있을 때는
-                    // 우측 미디어 카드에 중복 노출되지 않도록 세션을 미디어 카드 후보에서 제외
-                    service.mediaSession.isActive = false
-                } else {
-                    // 네이버 지도 등 다른 앱으로 전환되어 백그라운드가 되었을 때는
-                    // 우측 미디어 카드에 재생 컨트롤이 나오도록 활성화
-                    service.mediaSession.isActive = true
-                    service.updatePlaybackState(service.currentPlaybackState)
-                }
+                // 미디어 세션은 항상 활성화 상태로 유지하여 Gearhead가 최우선 미디어 카드로 인식하게 함
+                // 주의: 여기서 requestAudioFocus()를 재호출하면 같은 앱 내부의 WebView(Chromium)가 가진 오디오 포커스를 뺏어
+                // WebView에 AUDIOFOCUS_LOSS(-1)가 전달되고 백그라운드 영상이 일시정지되므로 절대 재요청하지 않음!
+                service.mediaSession.isActive = true
             }
         }
 
@@ -332,9 +374,7 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
                 if (stateChanged) {
                     service.updatePlaybackState(newState)
                 }
-                if (isDisplayingOnScreen) {
-                    service.mediaSession.isActive = false
-                }
+                service.mediaSession.isActive = true
             }
         }
     }

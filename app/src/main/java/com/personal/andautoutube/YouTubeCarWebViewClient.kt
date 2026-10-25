@@ -26,6 +26,7 @@ class YouTubeCarWebViewClient(
         url?.let {
             tvUrlDisplay?.text = it
         }
+        view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
@@ -35,6 +36,7 @@ class YouTubeCarWebViewClient(
             tvUrlDisplay?.text = it
             onPageFinishedListener?.invoke(it)
         }
+        view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
 
         // 차량 화면에 맞춤 스크립트 주입 (가로형 와이드 디스플레이 및 플레이 타임 바 터치 최적화)
         val carOptimizingJs = """

@@ -2,12 +2,17 @@ package com.personal.andautoutube
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Rect
+import android.graphics.SurfaceTexture
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -20,10 +25,35 @@ object CarWebViewManager {
 
     private const val TAG = "CarWebViewManager"
     private var webView: WebView? = null
+    private var virtualDisplay: VirtualDisplay? = null
+    private var presentation: AutoPresentation? = null
+    private var dummySurfaceTexture: SurfaceTexture? = null
+    private var dummySurface: Surface? = null
+    private var lastWidth = 0
+    private var lastHeight = 0
+    private var lastDpi = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isInitialLoaded = false
+    private var userRequestedPause = false
 
-    private const val VISIBILITY_SPOOF_JS = """
+    /**
+     * 백그라운드 전환/서피스 분리 시에도 Chromium 엔진이 윈도우 가시성을 항상 VISIBLE로 인식하도록 보장하는 커스텀 WebView
+     */
+    private class KeepAliveWebView(context: Context) : WebView(context) {
+        override fun onWindowVisibilityChanged(visibility: Int) {
+            super.onWindowVisibilityChanged(View.VISIBLE)
+        }
+
+        override fun onVisibilityChanged(changedView: View, visibility: Int) {
+            super.onVisibilityChanged(changedView, View.VISIBLE)
+        }
+
+        override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+            super.onWindowFocusChanged(true)
+        }
+    }
+
+    const val VISIBILITY_SPOOF_JS = """
         (function() {
             try {
                 Object.defineProperty(document, 'hidden', { get: function() { return false; }, configurable: true });
@@ -46,18 +76,159 @@ object CarWebViewManager {
         }
     }
 
+    /**
+     * 백그라운드 전환 직후 Chromium 또는 YouTube 모바일 웹이 일시적으로 비디오를 멈추더라도
+     * 사용자가 직접 일시정지한 상태가 아니라면 즉시 재생을 복구함
+     */
+    fun ensurePlayingInBackground() {
+        keepAlive()
+        if (userRequestedPause) return
+        val resumeJs = """
+            (function() {
+                try {
+                    var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+                    var v = document.querySelector('video');
+                    if (v && v.paused && !v.ended && v.currentTime > 0) {
+                        if (player && typeof player.playVideo === 'function') {
+                            player.playVideo();
+                        } else {
+                            v.play();
+                        }
+                    }
+                } catch (e) {}
+            })();
+        """.trimIndent()
+        mainHandler.postDelayed({
+            keepAlive()
+            if (!userRequestedPause) {
+                webView?.evaluateJavascript(resumeJs, null)
+            }
+        }, 120)
+        mainHandler.postDelayed({
+            keepAlive()
+            if (!userRequestedPause) {
+                webView?.evaluateJavascript(resumeJs, null)
+            }
+        }, 400)
+    }
+
+    /**
+     * 안드로이드 오토 서피스에 VirtualDisplay 및 AutoPresentation 연결.
+     * Screen이 finishCarApp() 등으로 재생성되더라도 싱글톤으로 유지하여 백그라운드 재생이 끊기지 않게 보장.
+     */
+    fun attachSurface(
+        context: Context,
+        surface: Surface,
+        width: Int,
+        height: Int,
+        dpi: Int,
+        visibleRect: Rect? = null
+    ) {
+        try {
+            val existing = virtualDisplay
+            val existingPres = presentation
+            if (existing != null && existingPres != null &&
+                width == lastWidth && height == lastHeight && dpi == lastDpi
+            ) {
+                existing.surface = surface
+                if (!existingPres.isShowing) {
+                    existingPres.show()
+                }
+                existingPres.ensureWebViewAttached()
+                visibleRect?.let { existingPres.updateVisibleArea(it) }
+                keepAlive()
+                Log.d(TAG, "Surface re-attached to existing VirtualDisplay (playback & WebView preserved)")
+                return
+            }
+
+            dismissPresentationInternal()
+
+            val appCtx = context.applicationContext
+            val displayManager = appCtx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            virtualDisplay = displayManager.createVirtualDisplay(
+                "AutoTubeVirtualDisplay",
+                width,
+                height,
+                dpi,
+                surface,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
+            )
+            lastWidth = width
+            lastHeight = height
+            lastDpi = dpi
+
+            virtualDisplay?.display?.let { display ->
+                presentation = AutoPresentation(appCtx, display, width, height).apply {
+                    show()
+                    ensureWebViewAttached()
+                    visibleRect?.let { rect -> updateVisibleArea(rect) }
+                }
+                Log.d(TAG, "AutoPresentation successfully displayed on VirtualDisplay (${width}x${height})")
+            }
+            keepAlive()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error attaching surface to VirtualDisplay", e)
+        }
+    }
+
+    private fun getOrCreateDummySurface(width: Int, height: Int): Surface {
+        val w = if (width > 0) width else 800
+        val h = if (height > 0) height else 400
+        val tex = dummySurfaceTexture ?: SurfaceTexture(10).also {
+            dummySurfaceTexture = it
+        }
+        tex.setDefaultBufferSize(w, h)
+        val surf = dummySurface
+        if (surf == null || !surf.isValid) {
+            surf?.release()
+            dummySurface = Surface(tex)
+        }
+        return dummySurface!!
+    }
+
+    /**
+     * 백그라운드 진입 또는 화면 분할 전환 시 프레젠테이션(윈도우)은 닫지 않고
+     * 오프스크린 더미 서피스로 전환하여 Display.STATE_ON을 유지(SleepToken 방지)하고 백그라운드 재생을 지속함
+     */
+    fun detachSurface() {
+        try {
+            virtualDisplay?.surface = getOrCreateDummySurface(lastWidth, lastHeight)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error detaching surface", e)
+        }
+        keepAlive()
+    }
+
+    fun getPresentation(): AutoPresentation? = presentation
+
+    private fun dismissPresentationInternal() {
+        try {
+            presentation?.dismiss()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error dismissing presentation", e)
+        }
+        presentation = null
+
+        try {
+            virtualDisplay?.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing virtualDisplay", e)
+        }
+        virtualDisplay = null
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     fun getOrCreateWebView(context: Context, display: Display? = null): WebView {
         if (webView == null) {
             Log.d(TAG, "Creating singleton Car WebView")
             // 가상 디스플레이 Context를 사용하여 정확한 해상도/DPI를 물려받음
             val targetContext = if (display != null) {
-                context.createDisplayContext(display)
+                context.applicationContext.createDisplayContext(display)
             } else {
                 context.applicationContext
             }
 
-            webView = WebView(targetContext).apply {
+            webView = KeepAliveWebView(targetContext).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -96,11 +267,13 @@ object CarWebViewManager {
                 addJavascriptInterface(object {
                     @android.webkit.JavascriptInterface
                     fun onMediaStateChanged(title: String, isPlaying: Boolean) {
+                        if (isPlaying) userRequestedPause = false
                         AutoMediaBrowserService.updateCurrentMedia(title, isPlaying)
                     }
 
                     @android.webkit.JavascriptInterface
                     fun onMediaDetailsChanged(title: String, artist: String, isPlaying: Boolean) {
+                        if (isPlaying) userRequestedPause = false
                         AutoMediaBrowserService.updateCurrentMedia(title, isPlaying, artist)
                     }
                 }, "AndroidMedia")
@@ -175,11 +348,19 @@ object CarWebViewManager {
 
     fun goBack(): Boolean {
         val target = webView ?: return false
-        if (target.canGoBack()) {
-            mainHandler.post { target.goBack() }
-            return true
+        mainHandler.post {
+            if (target.canGoBack()) {
+                target.goBack()
+            } else {
+                val currentUrl = target.url ?: ""
+                if (currentUrl.isNotEmpty() &&
+                    !currentUrl.endsWith("m.youtube.com/") &&
+                    !currentUrl.endsWith("m.youtube.com")) {
+                    target.loadUrl("https://m.youtube.com")
+                }
+            }
         }
-        return false
+        return true
     }
 
     fun reload() {
@@ -207,15 +388,25 @@ object CarWebViewManager {
                     var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
                     if (player && typeof player.getPlayerState === 'function') {
                         var state = player.getPlayerState();
-                        if (state === 1) player.pauseVideo();
-                        else player.playVideo();
+                        if (state === 1) { player.pauseVideo(); return 'paused'; }
+                        else { player.playVideo(); return 'playing'; }
                     } else {
                         var v = document.querySelector('video');
-                        if (v) { v.paused ? v.play() : v.pause(); }
+                        if (v) {
+                            if (v.paused) { v.play(); return 'playing'; }
+                            else { v.pause(); return 'paused'; }
+                        }
                     }
+                    return '';
                 })();
             """.trimIndent()
-            webView?.evaluateJavascript(js, null)
+            webView?.evaluateJavascript(js) { result ->
+                if (result?.contains("paused") == true) {
+                    userRequestedPause = true
+                } else if (result?.contains("playing") == true) {
+                    userRequestedPause = false
+                }
+            }
         }
     }
 
