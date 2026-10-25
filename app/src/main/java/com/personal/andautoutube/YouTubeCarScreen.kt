@@ -30,9 +30,26 @@ class YouTubeCarScreen(carContext: CarContext) : Screen(carContext), SurfaceCall
         // 호스트의 화면 서피스 콜백 등록
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(this)
 
-        // Screen이 완전히 파괴될 때만 프레젠테이션/가상 디스플레이 정리
+        // Screen 생명주기에 맞춰 미디어 카드 중복 방지 (화면 표시 중일 땐 미디어 카드 비활성화, 백그라운드 전환 시 활성화)
         lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
+                AutoMediaBrowserService.setForegroundDisplaying(true)
+            }
+
+            override fun onResume(owner: androidx.lifecycle.LifecycleOwner) {
+                AutoMediaBrowserService.setForegroundDisplaying(true)
+            }
+
+            override fun onPause(owner: androidx.lifecycle.LifecycleOwner) {
+                AutoMediaBrowserService.setForegroundDisplaying(false)
+            }
+
+            override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                AutoMediaBrowserService.setForegroundDisplaying(false)
+            }
+
             override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                AutoMediaBrowserService.setForegroundDisplaying(false)
                 mainHandler.post { dismissPresentation() }
             }
         })
@@ -46,6 +63,7 @@ class YouTubeCarScreen(carContext: CarContext) : Screen(carContext), SurfaceCall
         }
 
         Log.d(TAG, "onSurfaceAvailable: ${surfaceContainer.width}x${surfaceContainer.height}, dpi=${surfaceContainer.dpi}")
+        AutoMediaBrowserService.setForegroundDisplaying(true)
 
         mainHandler.post {
             try {
@@ -94,6 +112,7 @@ class YouTubeCarScreen(carContext: CarContext) : Screen(carContext), SurfaceCall
 
     override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
         Log.d(TAG, "onSurfaceDestroyed: keeping presentation attached so background playback continues")
+        AutoMediaBrowserService.setForegroundDisplaying(false)
         mainHandler.post {
             // 프레젠테이션을 닫지 않고 서피스만 분리 -> 웹뷰가 윈도우에 붙은 채 유지되어 재생이 끊기지 않음
             try {

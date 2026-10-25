@@ -300,6 +300,23 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
         const val ACTION_PREV = "com.personal.andautoutube.ACTION_PREV"
 
         var instance: AutoMediaBrowserService? = null
+        private var isDisplayingOnScreen: Boolean = false
+
+        fun setForegroundDisplaying(displaying: Boolean) {
+            isDisplayingOnScreen = displaying
+            instance?.let { service ->
+                if (displaying) {
+                    // 화면에 AutoTube가 직접 전체/메인으로 렌더링되고 있을 때는
+                    // 우측 미디어 카드에 중복 노출되지 않도록 세션을 미디어 카드 후보에서 제외
+                    service.mediaSession.isActive = false
+                } else {
+                    // 네이버 지도 등 다른 앱으로 전환되어 백그라운드가 되었을 때는
+                    // 우측 미디어 카드에 재생 컨트롤이 나오도록 활성화
+                    service.mediaSession.isActive = true
+                    service.updatePlaybackState(service.currentPlaybackState)
+                }
+            }
+        }
 
         fun updateCurrentMedia(title: String, isPlaying: Boolean = true, artist: String = "AutoTube") {
             instance?.let { service ->
@@ -314,6 +331,9 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
                 }
                 if (stateChanged) {
                     service.updatePlaybackState(newState)
+                }
+                if (isDisplayingOnScreen) {
+                    service.mediaSession.isActive = false
                 }
             }
         }
