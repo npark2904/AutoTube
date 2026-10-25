@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/presentationContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/black">
+
+    <!-- 100% 풀스크린 웹뷰 컨테이너 -->
+    <FrameLayout
+        android:id="@+id/webViewContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 상단 초슬림 로딩 프로그레스바 -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:indeterminate="false"
+        android:max="100"
+        android:progressTint="@color/youtube_red"
+        android:visibility="gone" />
+
+    <!-- 상단 중앙 초슬림 미니 플로팅 캡슐 (유튜브 헤더 영역 크기, 자동 페이드아웃) -->
+    <LinearLayout
+        android:id="@+id/topMiniControlBar"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_mini_control_bar"
+        android:elevation="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
+
+        <ImageButton
+            android:id="@+id/btnMiniBack"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="뒤로가기"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_nav_back" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:background="#33FFFFFF" />
+
+        <ImageButton
+            android:id="@+id/btnMiniHome"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="홈"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_nav_home" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:background="#33FFFFFF" />
+
+        <ImageButton
+            android:id="@+id/btnMiniRefresh"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="새로고침"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_nav_refresh" />
+
+    </LinearLayout>
+
+</FrameLayout>

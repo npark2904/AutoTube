@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">AutoTube</string>
+    <string name="media_root_name">AutoTube Media</string>
+    <string name="title_connected">안드로이드 오토 연결됨</string>
+    <string name="title_disconnected">안드로이드 오토 연결 대기 중</string>
+    <string name="desc_guide">안드로이드 오토에서 유튜브를 시청할 수 있는 전용 플레이어입니다. 차량 헤드유닛 또는 DHU(Desktop Head Unit) 시뮬레이터에 연결 시 차량 디스플레이에 유튜브 전체 화면이 표시됩니다.</string>
+</resources>
