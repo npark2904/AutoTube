@@ -1,10 +1,14 @@
 package com.personal.andautoutube
 
 import android.content.Intent
+import android.content.res.Configuration
+import android.util.Log
 import androidx.car.app.Screen
 import androidx.car.app.Session
 
 class YouTubeCarSession : Session() {
+
+    private var currentScreen: YouTubeCarScreen? = null
 
     override fun onCreateScreen(intent: Intent): Screen {
         // 폰 앱(MainActivity)을 거치지 않고 안드로이드 오토에서 바로 실행돼도
@@ -13,6 +17,18 @@ class YouTubeCarSession : Session() {
             carContext,
             Intent(carContext, AutoMediaBrowserService::class.java)
         )
-        return YouTubeCarScreen(carContext)
+        return YouTubeCarScreen(carContext).also {
+            currentScreen = it
+        }
+    }
+
+    override fun onCarConfigurationChanged(newConfig: Configuration) {
+        super.onCarConfigurationChanged(newConfig)
+        Log.d(TAG, "onCarConfigurationChanged: widthDp=${newConfig.screenWidthDp}, heightDp=${newConfig.screenHeightDp}")
+        currentScreen?.onCarConfigurationChanged(newConfig)
+    }
+
+    companion object {
+        private const val TAG = "YouTubeCarSession"
     }
 }
