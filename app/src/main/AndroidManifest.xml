@@ -48,7 +48,7 @@
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
 
-        <!-- 안드로이드 오토 연동 메타데이터 -->
+        <!-- 안드로이드 오토 연동 메타데이터 (템플릿 앱으로 인식) -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
@@ -78,7 +78,7 @@
             </intent-filter>
         </service>
 
-        <!-- 안드로이드 오토 Coolwalk 분할 화면 우측 미디어 카드 연동 서비스 -->
+        <!-- 안드로이드 오토 Coolwalk 분할 화면 우측 미디어 카드 및 하단 툴바 연동 서비스 -->
         <service
             android:name=".AutoMediaBrowserService"
             android:exported="true"
@@ -89,9 +89,6 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
-            <meta-data
-                android:name="com.google.android.gms.car.application"
-                android:resource="@xml/automotive_app_desc" />
         </service>
 
         <!-- 보조 디스플레이 프레젠테이션 관리 서비스 -->

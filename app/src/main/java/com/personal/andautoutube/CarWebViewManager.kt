@@ -538,18 +538,25 @@ object CarWebViewManager {
                 addJavascriptInterface(object {
                     @android.webkit.JavascriptInterface
                     fun onMediaStateChanged(title: String, isPlaying: Boolean) {
+                        if (!isCarConnected) return
                         currentMediaTitle = title
                         isPlayingMedia = isPlaying
                         if (isPlaying) userRequestedPause = false
-                        AutoMediaBrowserService.updateCurrentMedia(title, isPlaying)
+                        AutoMediaBrowserService.updateCurrentMediaFromCar(title, isPlaying)
                     }
 
                     @android.webkit.JavascriptInterface
                     fun onMediaDetailsChanged(title: String, artist: String, isPlaying: Boolean) {
+                        onMediaDetailsChanged(title, artist, isPlaying, "")
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onMediaDetailsChanged(title: String, artist: String, isPlaying: Boolean, thumbnailUrl: String) {
+                        if (!isCarConnected) return
                         currentMediaTitle = title
                         isPlayingMedia = isPlaying
                         if (isPlaying) userRequestedPause = false
-                        AutoMediaBrowserService.updateCurrentMedia(title, isPlaying, artist)
+                        AutoMediaBrowserService.updateCurrentMediaFromCar(title, isPlaying, artist, thumbnailUrl)
                     }
 
                     @android.webkit.JavascriptInterface

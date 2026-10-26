@@ -530,6 +530,8 @@ class YouTubeCarScreen(carContext: CarContext) : Screen(carContext), SurfaceCall
             val height = if (surfaceContainer.height > 0) surfaceContainer.height else 720
             val dpi = if (surfaceContainer.dpi > 0) surfaceContainer.dpi else 160
             CarWebViewManager.attachSurface(carContext, surface, width, height, dpi, lastVisibleRect)
+            AutoMediaBrowserService.setForegroundDisplaying(true)
+            AutoMediaBrowserService.updateCurrentMedia(CarWebViewManager.currentMediaTitle, isPlaying = true)
         }
     }
 

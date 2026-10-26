@@ -80,6 +80,22 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         setupBackNavigation()
 
+        AutoMediaBrowserService.mobileMediaActionListener = {
+            runOnUiThread {
+                previewWebView.evaluateJavascript("var v = document.querySelector('video'); if (v) { v.paused ? v.play() : v.pause(); }", null)
+            }
+        }
+        AutoMediaBrowserService.mobileNextListener = {
+            runOnUiThread {
+                previewWebView.evaluateJavascript("var nextBtn = document.querySelector('.ytp-next-button'); if (nextBtn) nextBtn.click();", null)
+            }
+        }
+        AutoMediaBrowserService.mobilePrevListener = {
+            runOnUiThread {
+                previewWebView.evaluateJavascript("var prevBtn = document.querySelector('.ytp-prev-button'); if (prevBtn) prevBtn.click(); else { var v = document.querySelector('video'); if (v) v.currentTime = 0; }", null)
+            }
+        }
+
         CarWebViewManager.phoneUrlSyncListener = { url ->
             runOnUiThread {
                 if (CarWebViewManager.getCanonicalKey(previewWebView.url) != CarWebViewManager.getCanonicalKey(url)) {
@@ -142,6 +158,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        AutoMediaBrowserService.mobileMediaActionListener = null
+        AutoMediaBrowserService.mobileNextListener = null
+        AutoMediaBrowserService.mobilePrevListener = null
+        if (!CarWebViewManager.isCarConnected) {
+            AutoMediaBrowserService.stopServiceIfIdle()
+        }
         CarWebViewManager.phoneUrlSyncListener = null
         super.onDestroy()
     }
@@ -178,6 +200,27 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(previewWebView, true)
 
+        previewWebView.addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun onMediaStateChanged(title: String, isPlaying: Boolean) {
+                runOnUiThread {
+                    AutoMediaBrowserService.updateCurrentMediaFromMobile(title, isPlaying)
+                }
+            }
+
+            @android.webkit.JavascriptInterface
+            fun onMediaDetailsChanged(title: String, artist: String, isPlaying: Boolean) {
+                onMediaDetailsChanged(title, artist, isPlaying, "")
+            }
+
+            @android.webkit.JavascriptInterface
+            fun onMediaDetailsChanged(title: String, artist: String, isPlaying: Boolean, thumbnailUrl: String) {
+                runOnUiThread {
+                    AutoMediaBrowserService.updateCurrentMediaFromMobile(title, isPlaying, artist, thumbnailUrl)
+                }
+            }
+        }, "AndroidMedia")
+
         if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
             androidx.webkit.WebViewCompat.addDocumentStartJavaScript(
                 previewWebView,
@@ -208,6 +251,70 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 phoneProgressBar.visibility = View.GONE
                 view?.evaluateJavascript(CarWebViewManager.VISIBILITY_SPOOF_JS, null)
+                val mediaWatchJs = """
+                    (function() {
+                        var __push = function() {
+                            try {
+                                var isWatchOrShorts = location.pathname.indexOf('/watch') === 0 || location.pathname.indexOf('/shorts') === 0;
+                                var mainDom = document.querySelector('ytm-browse, ytm-rich-grid-renderer, [tab-identifier="FEwhat_to_watch"], ytm-pivot-bar-renderer, ytm-search');
+                                var isMainScreen = !isWatchOrShorts && (location.pathname === '/' || !!mainDom);
+                                var title = '';
+                                var artist = 'AutoTube';
+
+                                if (isMainScreen) {
+                                    title = 'YouTube';
+                                    artist = 'AutoTube';
+                                } else {
+                                    var titleElem = document.querySelector('h2.ytVideoMetadataViewModelTitle') || document.querySelector('ytd-watch-metadata #title h1 yt-formatted-string') || document.querySelector('ytd-watch-metadata #title h1') || document.querySelector('#title h1') || document.querySelector('.slim-video-information-title, ytm-slim-video-metadata-renderer .title, .video-details-title');
+                                    title = (titleElem ? (titleElem.getAttribute('title') || titleElem.innerText || titleElem.textContent || '').trim() : '');
+                                    if (!title) {
+                                        var mt = document.querySelector('meta[property="og:title"]');
+                                        var dt = (document.title || '').replace(/ - YouTube${'$'}/, '').trim();
+                                        title = (dt && dt !== 'YouTube') ? dt : ((mt && mt.content) ? mt.content.trim() : '');
+                                    }
+                                    if (!title) title = 'YouTube';
+                                    var channelElem = document.querySelector('.ytVideoSubtitleViewModelSubtitleContent .ytVideoSubtitleViewModelBoldSubstring') || document.querySelector('.slim-owner-channel-name, ytm-channel-name, .channel-name, .ytm-slim-owner-channel-name');
+                                    artist = (channelElem ? channelElem.innerText.trim() : '') || 'AutoTube';
+                                }
+
+                                var thumbUrl = '';
+                                var ogImg = document.querySelector('meta[property="og:image"]');
+                                if (ogImg && ogImg.content) thumbUrl = ogImg.content.trim();
+                                if (!thumbUrl) {
+                                    var match = location.search.match(/[?&]v=([^&]+)/);
+                                    if (match) thumbUrl = 'https://i.ytimg.com/vi/' + match[1] + '/hqdefault.jpg';
+                                }
+
+                                var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+                                var isPlaying = false;
+                                if (player && typeof player.getPlayerState === 'function') {
+                                    var pState = player.getPlayerState();
+                                    isPlaying = (pState === 1 || pState === 3);
+                                } else {
+                                    var v = document.querySelector('video');
+                                    if (v) isPlaying = (!v.paused && !v.ended && v.currentTime > 0);
+                                }
+
+                                if (window.AndroidMedia) {
+                                    if (window.AndroidMedia.onMediaDetailsChanged) {
+                                        window.AndroidMedia.onMediaDetailsChanged(title, artist, isPlaying, thumbUrl);
+                                    } else {
+                                        window.AndroidMedia.onMediaStateChanged(title, isPlaying);
+                                    }
+                                }
+                            } catch(err) {}
+                        };
+                        if (window.__atMobileMediaHooked) { clearInterval(window.__atMobileMediaTimer); }
+                        else {
+                            window.__atMobileMediaHooked = true;
+                            ['play','playing','pause','ended','seeked'].forEach(function(t){ document.addEventListener(t, function(){ setTimeout(__push, 50); }, true); });
+                            ['click','touchend'].forEach(function(t){ document.addEventListener(t, function(){ [100,500,1200].forEach(function(ms){ setTimeout(__push, ms); }); }, true); });
+                        }
+                        window.__atMobileMediaTimer = setInterval(__push, 1000);
+                        __push();
+                    })();
+                """.trimIndent()
+                view?.evaluateJavascript(mediaWatchJs, null)
             }
         }
 
@@ -316,7 +423,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateConnectionStatus() {
         val displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
-        val isConnected = displays.any { it.displayId != Display.DEFAULT_DISPLAY }
+        val isPresentationConnected = displays.any { it.displayId != Display.DEFAULT_DISPLAY }
+        val isConnected = isPresentationConnected || CarWebViewManager.isCarConnected
 
         if (isConnected) {
             viewStatusIndicator.setBackgroundColor(getColor(android.R.color.holo_green_light))

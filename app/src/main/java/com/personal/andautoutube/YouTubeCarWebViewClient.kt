@@ -98,7 +98,7 @@ class YouTubeCarWebViewClient(
                         var artist = 'AutoTube';
 
                         if (isMainScreen) {
-                            title = 'Youtube';
+                            title = 'YouTube';
                             artist = 'AutoTube';
                         } else {
                             var titleElem = document.querySelector('h2.ytVideoMetadataViewModelTitle') || document.querySelector('ytd-watch-metadata #title h1 yt-formatted-string') || document.querySelector('ytd-watch-metadata #title h1') || document.querySelector('#title h1') || document.querySelector('.slim-video-information-title, ytm-slim-video-metadata-renderer .title, .video-details-title');
@@ -109,16 +109,30 @@ class YouTubeCarWebViewClient(
                                 title = (dt && dt !== 'YouTube') ? dt : ((mt && mt.content) ? mt.content.trim() : '');
                             }
                             if (!title) {
-                                title = 'Youtube';
+                                title = 'YouTube';
                             }
                             var channelElem = document.querySelector('.ytVideoSubtitleViewModelSubtitleContent .ytVideoSubtitleViewModelBoldSubstring') || document.querySelector('.slim-owner-channel-name, ytm-channel-name, .channel-name, .ytm-slim-owner-channel-name');
                             artist = (channelElem ? channelElem.innerText.trim() : '') || 'AutoTube';
                         }
 
+                        var thumbUrl = '';
+                        var ogImg = document.querySelector('meta[property="og:image"]');
+                        if (ogImg && ogImg.content) {
+                            thumbUrl = ogImg.content.trim();
+                        }
+                        if (!thumbUrl) {
+                            var vId = '';
+                            var match = location.search.match(/[?&]v=([^&]+)/);
+                            if (match) vId = match[1];
+                            else if (location.pathname.indexOf('/shorts/') === 0) vId = location.pathname.split('/')[2];
+                            if (vId) thumbUrl = 'https://i.ytimg.com/vi/' + vId + '/hqdefault.jpg';
+                        }
+
                         var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
                         var isPlaying = false;
                         if (player && typeof player.getPlayerState === 'function') {
-                            isPlaying = (player.getPlayerState() === 1);
+                            var pState = player.getPlayerState();
+                            isPlaying = (pState === 1 || pState === 3);
                         } else {
                             var v = document.querySelector('video');
                             if (v) isPlaying = (!v.paused && !v.ended && v.currentTime > 0);
@@ -126,7 +140,7 @@ class YouTubeCarWebViewClient(
 
                         if (window.AndroidMedia) {
                             if (window.AndroidMedia.onMediaDetailsChanged) {
-                                window.AndroidMedia.onMediaDetailsChanged(title, artist, isPlaying);
+                                window.AndroidMedia.onMediaDetailsChanged(title, artist, isPlaying, thumbUrl);
                             } else {
                                 window.AndroidMedia.onMediaStateChanged(title, isPlaying);
                             }
