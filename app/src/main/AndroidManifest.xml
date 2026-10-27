@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- 안드로이드 오토 네비게이션 앱 런처 노출 및 실행을 위한 필수 위치 권한 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- 안드로이드 오토 Surface 화면 직접 렌더링을 위한 권한 -->
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
     <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
@@ -71,7 +75,9 @@
         <!-- 안드로이드 오토 공식 CarAppService (헤드유닛 화면에 Surface 및 유튜브 렌더링) -->
         <service
             android:name=".AutoCarAppService"
-            android:exported="true">
+            android:exported="true"
+            android:label="@string/app_name"
+            android:icon="@mipmap/ic_launcher">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />

@@ -53,8 +53,11 @@ adb devices
 echo.
 
 echo [2/2] Installing AutoTube to Android device...
+echo Removing previous build for clean Play Store origin registration...
+adb uninstall com.personal.andautoutube >nul 2>&1
+
 echo Installing with Play Store identity: -i com.android.vending
-adb install -r -i "com.android.vending" "%APK_PATH%"
+adb install -i "com.android.vending" "%APK_PATH%"
 
 if %errorlevel% neq 0 (
     echo.

@@ -378,7 +378,7 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
                 .setMediaId("youtube_main")
                 .setTitle(currentTitle)
                 .setSubtitle(currentArtist)
-                .setDescription("YouTube 미디어 스트림")
+                .setDescription("영상 시청은 안드로이드 오토 런처의 '오토튜브' 앱을 터치하세요")
 
             val activeArt = currentAlbumArt ?: defaultAlbumArt
             activeArt?.let {
@@ -388,6 +388,19 @@ class AutoMediaBrowserService : MediaBrowserServiceCompat() {
             items.add(
                 MediaBrowserCompat.MediaItem(
                     descriptionBuilder.build(),
+                    MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+                )
+            )
+
+            val guideDesc = MediaDescriptionCompat.Builder()
+                .setMediaId("guide_screen_info")
+                .setTitle("▶ 영상 화면 시청 안내")
+                .setSubtitle("안드로이드 오토 런처의 '오토튜브'를 터치하세요")
+                .setDescription("오토튜브 앱을 터치하면 전체화면 YouTube 웹뷰가 실행됩니다")
+            defaultAlbumArt?.let { guideDesc.setIconBitmap(it) }
+            items.add(
+                MediaBrowserCompat.MediaItem(
+                    guideDesc.build(),
                     MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
                 )
             )

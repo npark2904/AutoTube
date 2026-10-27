@@ -21,6 +21,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.car.app.connection.CarConnection
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,13 +39,15 @@ class MainActivity : AppCompatActivity() {
     private var pendingWebPermission: android.webkit.PermissionRequest? = null
     private var backPressedTime: Long = 0L
     private var backToast: Toast? = null
+    private var isCarConnectedByCarConnection = false
 
-    private val micPermissionLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted ->
+    private val permissionsLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val micGranted = permissions[android.Manifest.permission.RECORD_AUDIO] ?: false
         val req = pendingWebPermission
         pendingWebPermission = null
-        if (granted) req?.grant(req.resources) else req?.deny()
+        if (micGranted) req?.grant(req.resources) else req?.deny()
     }
 
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -67,12 +70,41 @@ class MainActivity : AppCompatActivity() {
 
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
-        // 앱 시작 시 휴대폰 화면에서 마이크 권한을 미리 요청 (차량 화면에서는 팝업 불가)
+        // 앱 시작 시 안드로이드 오토 네비게이션 권한(위치) 및 음성 검색(마이크) 권한을 휴대폰 화면에서 미리 요청
+        val neededPermissions = mutableListOf<String>()
         if (androidx.core.content.ContextCompat.checkSelfPermission(
                 this, android.Manifest.permission.RECORD_AUDIO
             ) != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
-            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            neededPermissions.add(android.Manifest.permission.RECORD_AUDIO)
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            neededPermissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            neededPermissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        if (neededPermissions.isNotEmpty()) {
+            permissionsLauncher.launch(neededPermissions.toTypedArray())
+        }
+
+        // 공식 Android Auto CarConnection API를 통한 실제 차량 연결 여부 실시간 감지
+        try {
+            CarConnection(applicationContext).type.observe(this) { connectionType ->
+                val connected = (connectionType == CarConnection.CONNECTION_TYPE_PROJECTION ||
+                        connectionType == CarConnection.CONNECTION_TYPE_NATIVE)
+                isCarConnectedByCarConnection = connected
+                updateConnectionStatus()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "CarConnection observe failed", e)
+        }
+
+        CarWebViewManager.carConnectionListener = { _ ->
+            runOnUiThread {
+                updateConnectionStatus()
+            }
         }
 
         initViews()
@@ -161,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         AutoMediaBrowserService.mobileMediaActionListener = null
         AutoMediaBrowserService.mobileNextListener = null
         AutoMediaBrowserService.mobilePrevListener = null
+        CarWebViewManager.carConnectionListener = null
         if (!CarWebViewManager.isCarConnected) {
             AutoMediaBrowserService.stopServiceIfIdle()
         }
@@ -329,7 +362,7 @@ class MainActivity : AppCompatActivity() {
                         request.grant(request.resources)
                     } else {
                         pendingWebPermission = request
-                        micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        permissionsLauncher.launch(arrayOf(android.Manifest.permission.RECORD_AUDIO))
                     }
                 }
             }
@@ -424,7 +457,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateConnectionStatus() {
         val displays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
         val isPresentationConnected = displays.any { it.displayId != Display.DEFAULT_DISPLAY }
-        val isConnected = isPresentationConnected || CarWebViewManager.isCarConnected
+        val isConnected = isPresentationConnected || CarWebViewManager.isCarConnected || isCarConnectedByCarConnection
 
         if (isConnected) {
             viewStatusIndicator.setBackgroundColor(getColor(android.R.color.holo_green_light))

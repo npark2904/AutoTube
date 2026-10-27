@@ -36,6 +36,16 @@ object CarWebViewManager {
     private var isInitialLoaded = false
     private var userRequestedPause = false
     var isCarConnected = false
+        set(value) {
+            val changed = (field != value)
+            field = value
+            if (changed) {
+                mainHandler.post {
+                    carConnectionListener?.invoke(value)
+                }
+            }
+        }
+    var carConnectionListener: ((Boolean) -> Unit)? = null
     private val resumeRunnable = Runnable {
         if (!isCarConnected || userRequestedPause) return@Runnable
         keepAlive()
